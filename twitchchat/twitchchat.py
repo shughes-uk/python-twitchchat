@@ -116,8 +116,8 @@ class twitch_chat(object):
         if ircMessage[0] == "@":
             argstring_regex = r"^@([^ ]*)"
             argstring = re.search(argstring_regex, ircMessage).group(1)
-            arg_regx = r"([^=;]*)=([^;]*)"
-            args = dict(re.findall(arg_regx, ircMessage))
+            arg_regx = r"([^=;]*)=([^ c;]*)"
+            args = dict(re.findall(arg_regx, ircMessage[1:]))
             regex = r'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
             regex += r' PRIVMSG #([^ ]*)'  # channel
             regex += r' :(.*)'  # message
