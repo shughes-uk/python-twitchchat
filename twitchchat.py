@@ -43,7 +43,6 @@ class twitch_chat(object):
             while True:
                 time.sleep(0.1)
         finally:
-            asyncore.close_all()
             for handler in self.irc_handlers:
                 handler.stop()
 
