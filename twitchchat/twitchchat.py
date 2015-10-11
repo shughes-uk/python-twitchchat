@@ -2,9 +2,9 @@ import socket
 import re
 import logging
 import time
-import traceback
 from threading import Thread
-import asynchat, asyncore
+import asynchat
+import asyncore
 import urllib
 import json
 logger = logging.getLogger(name="tmi")
@@ -33,7 +33,7 @@ class twitch_chat(object):
         self.channel_servers = self.eliminate_duplicate_servers(channel_servers)
         self.irc_handlers = []
         for server in self.channel_servers:
-            handler = tmi_client(server,self.handle_message,self.handle_connect)
+            handler = tmi_client(server, self.handle_message, self.handle_connect)
             self.irc_handlers.append(handler)
 
     def run(self):
@@ -68,21 +68,21 @@ class twitch_chat(object):
         "Subscribe to a callback for new subscribers and resubs"
         self.sub_subscribers.append(callback)
 
-    def check_error(self, ircMessage,client):
+    def check_error(self, ircMessage, client):
         "Check for a login error notification and terminate if found"
         if re.search(r":tmi.twitch.tv NOTICE \* :Error logging i.*", ircMessage):
             self.logger.critical(
                 "Error logging in to twitch irc, check your oauth and username are set correctly in config.txt!")
             self.stop()
 
-    def check_join(self, ircMessage,client):
+    def check_join(self, ircMessage, client):
         "Watch for successful channel join messages"
         for chan in self.channels:
             if ircMessage.find("JOIN #%s" % chan) != -1:
                 self.logger.info("Joined channel %s successfully" % chan)
                 return True
 
-    def check_subscriber(self, ircMessage,client):
+    def check_subscriber(self, ircMessage, client):
         "Parse out new twitch subscriber messages and then call... python subscribers"
         match = re.search(
             r":twitchnotify!twitchnotify@twitchnotify\.tmi\.twitch\.tv PRIVMSG #([^ ]*) :([^ ]*) just subscribed!",
@@ -104,18 +104,16 @@ class twitch_chat(object):
                 sub(subscriber, months)
             return True
 
-    def check_ping(self, ircMessage,client):
+    def check_ping(self, ircMessage, client):
         "Respond to ping messages or twitch boots us off"
         if ircMessage.find('PING ') != -1:
             self.logger.info("Responding to a ping from twitch... pong!")
             client.push(str("PING :pong\n").encode('UTF-8'))
             return True
 
-    def check_message(self, ircMessage,client):
+    def check_message(self, ircMessage, client):
         "Watch for chat messages and notifiy subsribers"
         if ircMessage[0] == "@":
-            argstring_regex = r"^@([^ ]*)"
-            argstring = re.search(argstring_regex, ircMessage).group(1)
             arg_regx = r"([^=;]*)=([^ ;]*)"
             args = dict(re.findall(arg_regx, ircMessage[1:]))
             regex = r'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
@@ -129,7 +127,7 @@ class twitch_chat(object):
                 subscriber(args)
             return True
 
-    def handle_connect(self,client):
+    def handle_connect(self, client):
         self.logger.info('Connected..authenticating as %s' % self.user)
         client.push(str('Pass ' + self.oauth + '\r\n').encode('UTF-8'))
         client.push(str('NICK ' + self.user + '\r\n').lower().encode('UTF-8'))
@@ -140,25 +138,25 @@ class twitch_chat(object):
                 for chan in self.channel_servers[server]:
                     client.push(str('JOIN ' + '#' + chan + '\r\n').encode('UTF-8'))
 
-    def handle_message(self, ircMessage,client):
+    def handle_message(self, ircMessage, client):
         "Handle incoming IRC messages"
-        self.check_error(ircMessage,client)
-        if self.check_join(ircMessage,client):
+        self.check_error(ircMessage, client)
+        if self.check_join(ircMessage, client):
             return
-        elif self.check_ping(ircMessage,client):
+        elif self.check_ping(ircMessage, client):
             return
-        elif self.check_subscriber(ircMessage,client):
+        elif self.check_subscriber(ircMessage, client):
             return
-        elif self.check_message(ircMessage,client):
+        elif self.check_message(ircMessage, client):
             return
         else:
-            #self.logger.debug(ircMessage)
+            # self.logger.debug(ircMessage)
             pass
 
 
 class tmi_client(asynchat.async_chat, object):
 
-    def __init__(self, server, message_callback,connect_callback):
+    def __init__(self, server, message_callback, connect_callback):
         self.logger = logging.getLogger(name="tmi_client[{0}]".format(server))
         self.logger.info('TMI initializing')
         self.map = {}
@@ -180,11 +178,8 @@ class tmi_client(asynchat.async_chat, object):
         "Socket connected successfully"
         self.connect_callback(self)
 
-
     def handle_error(self):
-        #traceback.print_exc(sys.stderr)
         if self.socket:
-            pass
             self.close()
         raise
 
@@ -194,9 +189,9 @@ class tmi_client(asynchat.async_chat, object):
 
     def found_terminator(self):
         "Processes each line of text received from the IRC server."
-        txt = self.received_data.rstrip('\r')  #accept RFC-compliant and non-RFC-compliant lines.
+        txt = self.received_data.rstrip('\r')  # accept RFC-compliant and non-RFC-compliant lines.
         self.received_data = ""
-        self.message_callback(txt,self)
+        self.message_callback(txt, self)
 
     def start(self):
         "Connect start message watching thread"
