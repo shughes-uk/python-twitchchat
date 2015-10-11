@@ -14,7 +14,7 @@ def new_subscriber(name,months)
 
 tirc = twitch_chat('your twitch username', 'your twitch oauth', ['geekandsundry', 'riotgames'])
 tirc.subscribeChatMessage(new_message)
-tirc.subscribeNewSubscriber
+tirc.subscribeNewSubscriber(new_subscriber)
 tirc.run()
 ```
 
