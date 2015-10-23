@@ -78,7 +78,7 @@ class twitch_chat(object):
     def check_join(self, ircMessage, client):
         "Watch for successful channel join messages"
         for chan in self.channels:
-            if ircMessage.find("JOIN #%s" % chan) != -1:
+            if ircMessage.find("JOIN #%s" % chan.lower()) != -1:
                 self.logger.info("Joined channel %s successfully" % chan)
                 return True
 
@@ -136,7 +136,7 @@ class twitch_chat(object):
             if server == client.serverstring:
                 self.logger.info('Joining channels %s' % self.channel_servers[server])
                 for chan in self.channel_servers[server]:
-                    client.push(str('JOIN ' + '#' + chan + '\r\n').encode('UTF-8'))
+                    client.push(str('JOIN ' + '#' + chan.lower() + '\r\n').encode('UTF-8'))
 
     def handle_message(self, ircMessage, client):
         "Handle incoming IRC messages"
