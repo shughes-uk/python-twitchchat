@@ -91,20 +91,22 @@ class twitch_chat(object):
             r":twitchnotify!twitchnotify@twitchnotify\.tmi\.twitch\.tv PRIVMSG #([^ ]*) :([^ ]*) just subscribed!",
             ircMessage)
         if match:
+            channel = match.group(1)
             new_subscriber = match.group(2)
-            self.logger.info("New subscriber! %s" % new_subscriber)
+            self.logger.info("{0} has a new subscriber! {1}".format(channel, new_subscriber))
             for sub in self.sub_subscribers:
-                sub(new_subscriber, 0)
+                sub(channel, new_subscriber, 0)
             return True
         match = re.search(
             r":twitchnotify!twitchnotify@twitchnotify\.tmi\.twitch\.tv PRIVMSG #([^ ]*) :([^ ]*) subscribed for (.) months in a row!",
             ircMessage)
         if match:
+            channel = match.group(1)
             subscriber = match.group(2)
             months = match.group(3)
-            self.logger.info(("%s subscribed for %s months in a row") % (subscriber, months))
+            self.logger.info(("{0} subscribed to {1} for {2} months in a row".format(subscriber, channel, months)))
             for sub in self.sub_subscribers:
-                sub(subscriber, months)
+                sub(channel, subscriber, months)
             return True
 
     def check_ping(self, ircMessage, client):
@@ -143,6 +145,7 @@ class twitch_chat(object):
 
     def handle_message(self, ircMessage, client):
         "Handle incoming IRC messages"
+        self.logger.debug(ircMessage)
         if self.check_message(ircMessage, client):
             return
         elif self.check_join(ircMessage, client):
@@ -153,9 +156,6 @@ class twitch_chat(object):
             return
         elif self.check_error(ircMessage, client):
             return
-        else:
-            self.logger.debug(ircMessage)
-            pass
 
 
 class tmi_client(asynchat.async_chat, object):
