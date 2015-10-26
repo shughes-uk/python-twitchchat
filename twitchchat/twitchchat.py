@@ -111,7 +111,7 @@ class twitch_chat(object):
 
     def check_ping(self, ircMessage, client):
         "Respond to ping messages or twitch boots us off"
-        if re.search(r":tmi.twitch.tv PING", ircMessage):
+        if re.search(r":tmi\.twitch\.tv PING", ircMessage):
             self.logger.info("Responding to a ping from twitch... pong!")
             client.push(str("PING :pong\n").encode('UTF-8'))
             return True
