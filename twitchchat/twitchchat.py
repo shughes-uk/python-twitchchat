@@ -202,6 +202,7 @@ class tmi_client(asynchat.async_chat, object):
         if not self.asynloop_thread.is_alive():
             self.running = True
             self.asynloop_thread = Thread(target=self.run)
+            self.asynloop_thread.daemon = True
             self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
             self.connect((self.server, self.port))
             self.asynloop_thread.start()
