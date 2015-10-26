@@ -35,6 +35,7 @@ class twitch_chat(object):
         for server in self.channel_servers:
             handler = tmi_client(server, self.handle_message, self.handle_connect)
             self.irc_handlers.append(handler)
+        self.pre_messageregex = r"".format(user)
 
     def run(self):
         try:
@@ -74,12 +75,14 @@ class twitch_chat(object):
             self.logger.critical(
                 "Error logging in to twitch irc, check your oauth and username are set correctly in config.txt!")
             self.stop()
+            return True
 
     def check_join(self, ircMessage, client):
         "Watch for successful channel join messages"
-        for chan in self.channels:
-            if ircMessage.find("JOIN #%s" % chan.lower()) != -1:
-                self.logger.info("Joined channel %s successfully" % chan)
+        match = re.search(r":{0}!{0}@{0}\.tmi\.twitch\.tv JOIN #(.*)".format(self.user), ircMessage)
+        if match:
+            if match.group(1) in self.channels:
+                self.logger.info("Joined channel {0} successfully".format(match.group(1)))
                 return True
 
     def check_subscriber(self, ircMessage, client):
@@ -106,7 +109,7 @@ class twitch_chat(object):
 
     def check_ping(self, ircMessage, client):
         "Respond to ping messages or twitch boots us off"
-        if ircMessage.find('PING ') != -1:
+        if re.search(r":tmi.twitch.tv PING", ircMessage):
             self.logger.info("Responding to a ping from twitch... pong!")
             client.push(str("PING :pong\n").encode('UTF-8'))
             return True
@@ -140,17 +143,18 @@ class twitch_chat(object):
 
     def handle_message(self, ircMessage, client):
         "Handle incoming IRC messages"
-        self.check_error(ircMessage, client)
-        if self.check_join(ircMessage, client):
+        if self.check_message(ircMessage, client):
             return
-        elif self.check_ping(ircMessage, client):
+        elif self.check_join(ircMessage, client):
             return
         elif self.check_subscriber(ircMessage, client):
             return
-        elif self.check_message(ircMessage, client):
+        elif self.check_ping(ircMessage, client):
+            return
+        elif self.check_error(ircMessage, client):
             return
         else:
-            # self.logger.debug(ircMessage)
+            self.logger.debug(ircMessage)
             pass
 
 
