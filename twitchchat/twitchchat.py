@@ -119,11 +119,13 @@ class twitch_chat(object):
     def check_message(self, ircMessage, client):
         "Watch for chat messages and notifiy subsribers"
         if ircMessage[0] == "@":
-            arg_regx = r"([^=;]*)=([^ ;]*)"
+            arg_regx = ur"([^=;]*)=([^ ;]*)"
+            arg_regx = re.compile(arg_regx, re.UNICODE)
             args = dict(re.findall(arg_regx, ircMessage[1:]))
-            regex = r'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
-            regex += r' PRIVMSG #([^ ]*)'  # channel
-            regex += r' :(.*)'  # message
+            regex = ur'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
+            regex += ur' PRIVMSG #([^ ]*)'  # channel
+            regex += ur' :(.*)'  # message
+            regex = re.compile(regex, re.UNICODE)
             match = re.search(regex, ircMessage)
             args['username'] = match.group(1)
             args['channel'] = match.group(2)
@@ -195,7 +197,7 @@ class tmi_client(asynchat.async_chat, object):
         "Processes each line of text received from the IRC server."
         txt = self.received_data.rstrip('\r')  # accept RFC-compliant and non-RFC-compliant lines.
         self.received_data = ""
-        self.message_callback(txt, self)
+        self.message_callback(txt.decode("utf-8"), self)
 
     def start(self):
         "Connect start message watching thread"
