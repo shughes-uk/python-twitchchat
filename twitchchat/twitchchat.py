@@ -1,7 +1,6 @@
 import socket
 import re
 import logging
-import time
 from threading import Thread
 import asynchat
 import asyncore
@@ -37,15 +36,13 @@ class twitch_chat(object):
             self.irc_handlers.append(handler)
         self.pre_messageregex = r"".format(user)
 
-    def run(self):
-        try:
-            for handler in self.irc_handlers:
-                handler.start()
-            while True:
-                time.sleep(0.1)
-        finally:
-            for handler in self.irc_handlers:
-                handler.stop()
+    def start(self):
+        for handler in self.irc_handlers:
+            handler.start()
+
+    def stop(self):
+        for handler in self.irc_handlers:
+            handler.stop()
 
     def eliminate_duplicate_servers(self, channel_servers):
         for key in channel_servers.keys():
