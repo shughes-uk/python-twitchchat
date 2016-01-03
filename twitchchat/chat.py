@@ -25,7 +25,7 @@ class twitch_chat(object):
             data = json.loads(response.read())
             for server in data["chat_servers"]:
                 if server in channel_servers:
-                    channel_servers[server].add(channel)
+                    channel_servers[server]['channel_set'].add(channel)
                 else:
                     channel_servers[server] = {"channel_set": set()}
                     channel_servers[server]['channel_set'].add(channel)
