@@ -129,7 +129,11 @@ class twitch_chat(object):
             args['channel'] = match.group(2)
             args['message'] = match.group(3)
             for subscriber in self.chat_subscribers:
-                subscriber(args)
+                try:
+                    subscriber(args)
+                except Exception:
+                    msg = "Exception during callback to {0}".format(subscriber)
+                    self.logger.exception(msg)
             return True
 
     def handle_connect(self, client):
