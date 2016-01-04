@@ -225,7 +225,14 @@ class tmi_client(asynchat.async_chat, object):
         if self.asynloop_thread.is_alive():
             if self.socket:
                 self.close()
-            self.asynloop_thread.join()
+            try:
+                self.asynloop_thread.join()
+            except RuntimeError, e:
+                if e.message == "cannot join current thread":
+                    # this is thrown when joining the current thread and is ok.. for now"
+                    pass
+                else:
+                    raise e
 
     def run(self):
         "Loop!"
