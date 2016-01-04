@@ -35,7 +35,6 @@ class twitch_chat(object):
             handler = tmi_client(server, self.handle_message, self.handle_connect)
             self.channel_servers[server]['client'] = handler
             self.irc_handlers.append(handler)
-        self.pre_messageregex = r"".format(user)
 
     def start(self):
         for handler in self.irc_handlers:
