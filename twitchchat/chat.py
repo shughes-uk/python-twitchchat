@@ -45,7 +45,7 @@ class twitch_chat(object):
             handler.stop()
 
     def eliminate_duplicate_servers(self, channel_servers):
-        for key in channel_servers.keys():
+        for key in list(channel_servers):
             if key in channel_servers:
                 for other_key in [k for k in channel_servers.keys() if not k == key]:
                     if other_key in channel_servers:
@@ -110,7 +110,7 @@ class twitch_chat(object):
         "Respond to ping messages or twitch boots us off"
         if re.search(r"PING :tmi\.twitch\.tv", ircMessage):
             self.logger.info("Responding to a ping from twitch... pong!")
-            client.push(str("PING :pong\r\n").encode('UTF-8'))
+            client.send_message("PING :pong\r\n")
             return True
 
     def check_message(self, ircMessage, client):
@@ -136,15 +136,15 @@ class twitch_chat(object):
             return True
 
     def handle_connect(self, client):
-        self.logger.info('Connected..authenticating as %s' % self.user)
-        client.push(str('Pass ' + self.oauth + '\r\n').encode('UTF-8'))
-        client.push(str('NICK ' + self.user + '\r\n').lower().encode('UTF-8'))
-        client.push(str('CAP REQ :twitch.tv/tags\r\n').encode('UTF-8'))
+        self.logger.info('Connected..authenticating as {0}'.format(self.user))
+        client.send_message('Pass ' + self.oauth + '\r\n')
+        client.send_message('NICK ' + self.user + '\r\n'.lower())
+        client.send_message('CAP REQ :twitch.tv/tags\r\n')
         for server in self.channel_servers:
             if server == client.serverstring:
-                self.logger.info('Joining channels %s' % self.channel_servers[server])
+                self.logger.info('Joining channels {0}'.format(self.channel_servers[server]))
                 for chan in self.channel_servers[server]['channel_set']:
-                    client.push(str('JOIN ' + '#' + chan.lower() + '\r\n').encode('UTF-8'))
+                    client.send_message('JOIN ' + '#' + chan.lower() + '\r\n')
 
     def handle_message(self, ircMessage, client):
         "Handle incoming IRC messages"
@@ -164,7 +164,7 @@ class twitch_chat(object):
         for server in self.channel_servers:
             if channel in self.channel_servers[server]['channel_set']:
                 client = self.channel_servers[server]['client']
-                client.push(str('PRIVMSG #%s :%s\n' % (channel, message)).encode('UTF-8'))
+                client.send_message('PRIVMSG #{0} :{1}\n'.format(channel, message))
                 break
 
 
@@ -187,6 +187,9 @@ class tmi_client(asynchat.async_chat, object):
         self.connect_callback = connect_callback
         self.logger.info('TMI initialized')
         return
+
+    def send_message(self,msg):
+        self.push(msg.encode("UTF-8"))
 
     def handle_connect(self):
         "Socket connected successfully"
