@@ -4,8 +4,15 @@ import logging
 from threading import Thread
 import asynchat
 import asyncore
-import urllib
 import json
+
+try:
+    # Python 3
+    from urllib.request import urlopen
+except ImportError:
+    # Python 2
+    from urllib import urlopen
+
 logger = logging.getLogger(name="tmi")
 
 
@@ -21,8 +28,8 @@ class twitch_chat(object):
         channel_servers = {}
         for channel in channels:
             url = "http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel)
-            response = urllib.urlopen(url)
-            data = json.loads(response.read())
+            response = urlopen(url)
+            data = json.loads(response.read().decode('UTF-8'))
             for server in data["chat_servers"]:
                 if server in channel_servers:
                     channel_servers[server]['channel_set'].add(channel)
