@@ -213,7 +213,7 @@ class tmi_client(asynchat.async_chat, object):
     def found_terminator(self):
         "Processes each line of text received from the IRC server."
         txt = self.received_data.rstrip(b'\r')  # accept RFC-compliant and non-RFC-compliant lines.
-        self.received_data.clear()
+        self.received_data = bytearray()
         self.message_callback(txt.decode("utf-8"), self)
 
     def start(self):
