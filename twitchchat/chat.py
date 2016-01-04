@@ -47,13 +47,13 @@ class twitch_chat(object):
     def eliminate_duplicate_servers(self, channel_servers):
         for key in list(channel_servers):
             if key in channel_servers:
-                for other_key in [k for k in channel_servers.keys() if not k == key]:
+                for other_key in [k for k in list(channel_servers) if not k == key]:
                     if other_key in channel_servers:
                         if channel_servers[other_key]['channel_set'].issubset(channel_servers[key]['channel_set']):
                             del channel_servers[other_key]
         for server in channel_servers:
             for channel in channel_servers[server]['channel_set']:
-                for other_server in [k for k in channel_servers.keys() if not k == server]:
+                for other_server in [k for k in list(channel_servers) if not k == server]:
                     if channel in channel_servers[other_server]['channel_set']:
                         channel_servers[other_server]['channel_set'].remove(channel)
         return channel_servers
