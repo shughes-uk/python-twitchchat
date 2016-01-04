@@ -46,6 +46,10 @@ class twitch_chat(object):
         for handler in self.irc_handlers:
             handler.start()
 
+    def join(self):
+        for handler in self.irc_handlers:
+            handler.asynloop_thread.join()
+
     def stop(self):
         for handler in self.irc_handlers:
             handler.stop()
