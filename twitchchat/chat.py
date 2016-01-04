@@ -117,12 +117,12 @@ class twitch_chat(object):
     def check_message(self, ircMessage, client):
         "Watch for chat messages and notifiy subsribers"
         if ircMessage[0] == "@":
-            arg_regx = ur"([^=;]*)=([^ ;]*)"
+            arg_regx = "([^=;]*)=([^ ;]*)"
             arg_regx = re.compile(arg_regx, re.UNICODE)
             args = dict(re.findall(arg_regx, ircMessage[1:]))
-            regex = ur'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
-            regex += ur' PRIVMSG #([^ ]*)'  # channel
-            regex += ur' :(.*)'  # message
+            regex = ('^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
+                     ' PRIVMSG #([^ ]*)'  # channel
+                     ' :(.*)')  # message
             regex = re.compile(regex, re.UNICODE)
             match = re.search(regex, ircMessage)
             args['username'] = match.group(1)
