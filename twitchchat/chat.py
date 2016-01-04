@@ -5,6 +5,7 @@ from threading import Thread
 import asynchat
 import asyncore
 import json
+from itertools import product
 
 try:
     # Python 3
@@ -34,8 +35,7 @@ class twitch_chat(object):
                 if server in channel_servers:
                     channel_servers[server]['channel_set'].add(channel)
                 else:
-                    channel_servers[server] = {"channel_set": set()}
-                    channel_servers[server]['channel_set'].add(channel)
+                    channel_servers[server] = {"channel_set": {channel}}
         self.channel_servers = self.eliminate_duplicate_servers(channel_servers)
         self.irc_handlers = []
         for server in self.channel_servers:
@@ -53,17 +53,17 @@ class twitch_chat(object):
             handler.stop()
 
     def eliminate_duplicate_servers(self, channel_servers):
-        for key in channel_servers.keys():
-            if key in channel_servers:
-                for other_key in [k for k in channel_servers.keys() if not k == key]:
-                    if other_key in channel_servers:
-                        if channel_servers[other_key]['channel_set'].issubset(channel_servers[key]['channel_set']):
-                            del channel_servers[other_key]
-        for server in channel_servers:
-            for channel in channel_servers[server]['channel_set']:
-                for other_server in [k for k in channel_servers.keys() if not k == server]:
-                    if channel in channel_servers[other_server]['channel_set']:
-                        channel_servers[other_server]['channel_set'].remove(channel)
+        eliminate_servers = set()
+        for server, other_server in product(channel_servers, channel_servers):
+            if server != other_server:
+                if channel_servers[other_server]['channel_set'].issubset(channel_servers[server]['channel_set']):
+                    eliminate_servers.add(other_server)
+        for server in eliminate_servers:
+            del channel_servers[server]
+
+        for server, other_server in product(channel_servers, channel_servers):
+            if server != other_server:
+                channel_servers[other_server]['channel_set'] -= channel_servers[server]['channel_set']
         return channel_servers
 
     def subscribeChatMessage(self, callback):
