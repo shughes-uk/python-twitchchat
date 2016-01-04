@@ -1,1 +1,1 @@
-from chat import twitch_chat
+from .chat import twitch_chat

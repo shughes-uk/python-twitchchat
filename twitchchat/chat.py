@@ -4,8 +4,15 @@ import logging
 from threading import Thread
 import asynchat
 import asyncore
-import urllib
 import json
+
+try:
+    # Python 3
+    from urllib.request import urlopen
+except ImportError:
+    # Python 2
+    from urllib import urlopen
+
 logger = logging.getLogger(name="tmi")
 
 
@@ -21,14 +28,13 @@ class twitch_chat(object):
         channel_servers = {}
         for channel in channels:
             url = "http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel)
-            response = urllib.urlopen(url)
-            data = json.loads(response.read())
+            response = urlopen(url)
+            data = json.loads(response.read().decode('UTF-8'))
             for server in data["chat_servers"]:
                 if server in channel_servers:
                     channel_servers[server]['channel_set'].add(channel)
                 else:
-                    channel_servers[server] = {"channel_set": set()}
-                    channel_servers[server]['channel_set'].add(channel)
+                    channel_servers[server] = {"channel_set": {channel}}
         self.channel_servers = self.eliminate_duplicate_servers(channel_servers)
         self.irc_handlers = []
         for server in self.channel_servers:
@@ -47,14 +53,14 @@ class twitch_chat(object):
     def eliminate_duplicate_servers(self, channel_servers):
         for key in list(channel_servers):
             if key in channel_servers:
-                for other_key in [k for k in list(channel_servers) if not k == key]:
-                    if other_key in channel_servers:
+                for other_key in list(channel_servers):
+                    if other_key != key and other_key in channel_servers:
                         if channel_servers[other_key]['channel_set'].issubset(channel_servers[key]['channel_set']):
                             del channel_servers[other_key]
         for server in channel_servers:
             for channel in channel_servers[server]['channel_set']:
-                for other_server in [k for k in list(channel_servers) if not k == server]:
-                    if channel in channel_servers[other_server]['channel_set']:
+                for other_server in channel_servers:
+                    if other_server != server and channel in channel_servers[other_server]['channel_set']:
                         channel_servers[other_server]['channel_set'].remove(channel)
         return channel_servers
 
@@ -116,12 +122,12 @@ class twitch_chat(object):
     def check_message(self, ircMessage, client):
         "Watch for chat messages and notifiy subsribers"
         if ircMessage[0] == "@":
-            arg_regx = ur"([^=;]*)=([^ ;]*)"
+            arg_regx = "([^=;]*)=([^ ;]*)"
             arg_regx = re.compile(arg_regx, re.UNICODE)
             args = dict(re.findall(arg_regx, ircMessage[1:]))
-            regex = ur'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
-            regex += ur' PRIVMSG #([^ ]*)'  # channel
-            regex += ur' :(.*)'  # message
+            regex = ('^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
+                     ' PRIVMSG #([^ ]*)'  # channel
+                     ' :(.*)')  # message
             regex = re.compile(regex, re.UNICODE)
             match = re.search(regex, ircMessage)
             args['username'] = match.group(1)
@@ -175,12 +181,12 @@ class tmi_client(asynchat.async_chat, object):
         self.logger.info('TMI initializing')
         self.map = {}
         asynchat.async_chat.__init__(self, map=self.map)
-        self.received_data = ""
+        self.received_data = bytearray()
         servernport = server.split(":")
         self.serverstring = server
         self.server = servernport[0]
         self.port = int(servernport[1])
-        self.set_terminator('\n')
+        self.set_terminator(b'\n')
         self.asynloop_thread = Thread(target=self.run)
         self.running = False
         self.message_callback = message_callback
@@ -188,7 +194,7 @@ class tmi_client(asynchat.async_chat, object):
         self.logger.info('TMI initialized')
         return
 
-    def send_message(self,msg):
+    def send_message(self, msg):
         self.push(msg.encode("UTF-8"))
 
     def handle_connect(self):
@@ -202,12 +208,12 @@ class tmi_client(asynchat.async_chat, object):
 
     def collect_incoming_data(self, data):
         "Dump recieved data into a buffer"
-        self.received_data += (data)
+        self.received_data += data
 
     def found_terminator(self):
         "Processes each line of text received from the IRC server."
-        txt = self.received_data.rstrip('\r')  # accept RFC-compliant and non-RFC-compliant lines.
-        self.received_data = ""
+        txt = self.received_data.rstrip(b'\r')  # accept RFC-compliant and non-RFC-compliant lines.
+        self.received_data.clear()
         self.message_callback(txt.decode("utf-8"), self)
 
     def start(self):
@@ -229,7 +235,7 @@ class tmi_client(asynchat.async_chat, object):
                 self.close()
             try:
                 self.asynloop_thread.join()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if e.message == "cannot join current thread":
                     # this is thrown when joining the current thread and is ok.. for now"
                     pass
