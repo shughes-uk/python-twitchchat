@@ -5,7 +5,6 @@ from threading import Thread
 import asynchat
 import asyncore
 import json
-from itertools import product
 
 try:
     # Python 3
@@ -53,17 +52,17 @@ class twitch_chat(object):
             handler.stop()
 
     def eliminate_duplicate_servers(self, channel_servers):
-        eliminate_servers = set()
-        for server, other_server in product(channel_servers, channel_servers):
-            if server != other_server:
-                if channel_servers[other_server]['channel_set'].issubset(channel_servers[server]['channel_set']):
-                    eliminate_servers.add(other_server)
-        for server in eliminate_servers:
-            del channel_servers[server]
-
-        for server, other_server in product(channel_servers, channel_servers):
-            if server != other_server:
-                channel_servers[other_server]['channel_set'] -= channel_servers[server]['channel_set']
+        for key in list(channel_servers):
+            if key in channel_servers:
+                for other_key in list(channel_servers):
+                    if other_key != key and other_key in channel_servers:
+                        if channel_servers[other_key]['channel_set'].issubset(channel_servers[key]['channel_set']):
+                            del channel_servers[other_key]
+        for server in channel_servers:
+            for channel in channel_servers[server]['channel_set']:
+                for other_server in channel_servers:
+                    if other_server != server and channel in channel_servers[other_server]['channel_set']:
+                        channel_servers[other_server]['channel_set'].remove(channel)
         return channel_servers
 
     def subscribeChatMessage(self, callback):
@@ -183,12 +182,12 @@ class tmi_client(asynchat.async_chat, object):
         self.logger.info('TMI initializing')
         self.map = {}
         asynchat.async_chat.__init__(self, map=self.map)
-        self.received_data = ""
+        self.received_data = bytearray()
         servernport = server.split(":")
         self.serverstring = server
         self.server = servernport[0]
         self.port = int(servernport[1])
-        self.set_terminator('\n')
+        self.set_terminator(b'\n')
         self.asynloop_thread = Thread(target=self.run)
         self.running = False
         self.message_callback = message_callback
@@ -207,12 +206,12 @@ class tmi_client(asynchat.async_chat, object):
 
     def collect_incoming_data(self, data):
         "Dump recieved data into a buffer"
-        self.received_data += (data)
+        self.received_data += data
 
     def found_terminator(self):
         "Processes each line of text received from the IRC server."
-        txt = self.received_data.rstrip('\r')  # accept RFC-compliant and non-RFC-compliant lines.
-        self.received_data = ""
+        txt = self.received_data.rstrip(b'\r')  # accept RFC-compliant and non-RFC-compliant lines.
+        self.received_data.clear()
         self.message_callback(txt.decode("utf-8"), self)
 
     def start(self):
@@ -234,7 +233,7 @@ class tmi_client(asynchat.async_chat, object):
                 self.close()
             try:
                 self.asynloop_thread.join()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if e.message == "cannot join current thread":
                     # this is thrown when joining the current thread and is ok.. for now"
                     pass
