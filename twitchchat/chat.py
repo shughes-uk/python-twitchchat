@@ -174,7 +174,7 @@ class twitch_chat(object):
         for server in self.channel_servers:
             if channel in self.channel_servers[server]['channel_set']:
                 client = self.channel_servers[server]['client']
-                client.send_message('PRIVMSG #{0} :{1}\n'.format(channel, message))
+                client.send_message(u'PRIVMSG #{0} :{1}\n'.format(channel, message))
                 break
 
 
