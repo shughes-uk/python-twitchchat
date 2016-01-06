@@ -7,13 +7,15 @@ import asyncore
 import json
 import time
 from datetime import datetime, timedelta
-from Queue import Queue
-try:
-    # Python 3
+import sys
+PY3 = sys.version_info[0] == 3
+if PY3:
     from urllib.request import urlopen
-except ImportError:
-    # Python 2
+    from queue import Queue
+else:
     from urllib import urlopen
+    from Queue import Queue
+
 
 logger = logging.getLogger(name="tmi")
 
