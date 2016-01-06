@@ -5,7 +5,9 @@ from threading import Thread
 import asynchat
 import asyncore
 import json
-
+import time
+from datetime import datetime, timedelta
+from Queue import Queue
 try:
     # Python 3
     from urllib.request import urlopen
@@ -178,6 +180,10 @@ class twitch_chat(object):
                 break
 
 
+MAX_SEND_RATE = 20
+SEND_RATE_WITHIN_SECONDS = 30
+
+
 class tmi_client(asynchat.async_chat, object):
 
     def __init__(self, server, message_callback, connect_callback):
@@ -195,11 +201,13 @@ class tmi_client(asynchat.async_chat, object):
         self.running = False
         self.message_callback = message_callback
         self.connect_callback = connect_callback
+        self.message_queue = Queue()
+        self.messages_sent = []
         self.logger.info('TMI initialized')
         return
 
     def send_message(self, msg):
-        self.push(msg.encode("UTF-8"))
+        self.message_queue.put(msg.encode("UTF-8"))
 
     def handle_connect(self):
         "Socket connected successfully"
@@ -229,22 +237,42 @@ class tmi_client(asynchat.async_chat, object):
             self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
             self.connect((self.server, self.port))
             self.asynloop_thread.start()
+
+            self.send_thread = Thread(target=self.send_loop)
+            self.send_thread.daemon = True
+            self.send_thread.start()
         else:
             self.logger.critical("Already running can't run twice")
 
     def stop(self):
         "Terminate the message watching thread by killing the socket"
+        self.running = False
         if self.asynloop_thread.is_alive():
             if self.socket:
                 self.close()
             try:
                 self.asynloop_thread.join()
+                self.send_thread.join()
             except RuntimeError as e:
                 if e.message == "cannot join current thread":
                     # this is thrown when joining the current thread and is ok.. for now"
                     pass
                 else:
                     raise e
+
+    def send_loop(self):
+        while self.running:
+            time.sleep(1)
+            if len(self.messages_sent) < MAX_SEND_RATE:
+                if not self.message_queue.empty():
+                    to_send = self.message_queue.get()
+                    self.logger.debug("Sending")
+                    self.logger.debug(to_send)
+                    self.push(to_send)
+                    self.messages_sent.append(datetime.now())
+            else:
+                time_cutoff = datetime.now() - timedelta(seconds=SEND_RATE_WITHIN_SECONDS)
+                self.messages_sent = [dt for dt in self.messages_sent if dt < time_cutoff]
 
     def run(self):
         "Loop!"
