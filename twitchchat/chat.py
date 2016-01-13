@@ -1,13 +1,14 @@
-import socket
-import re
-import logging
-from threading import Thread
 import asynchat
 import asyncore
 import json
+import logging
+import re
+import socket
+import sys
 import time
 from datetime import datetime, timedelta
-import sys
+from threading import Thread
+
 PY3 = sys.version_info[0] == 3
 if PY3:
     from urllib.request import urlopen
