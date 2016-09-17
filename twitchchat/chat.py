@@ -1,28 +1,28 @@
-import socket
-import re
-import logging
-from threading import Thread
 import asynchat
 import asyncore
 import json
+import logging
+import re
+import socket
+import sys
 import time
 from datetime import datetime, timedelta
-import sys
+from threading import Thread
+
 PY3 = sys.version_info[0] == 3
 if PY3:
-    from urllib.request import urlopen
+    from urllib.request import urlopen, Request
     from queue import Queue
 else:
-    from urllib import urlopen
+    from urllib2 import urlopen, Request
     from Queue import Queue
-
 
 logger = logging.getLogger(name="tmi")
 
 
 class twitch_chat(object):
 
-    def __init__(self, user, oauth, channels):
+    def __init__(self, user, oauth, channels, client_id):
         self.logger = logging.getLogger(name="twitch_chat")
         self.chat_subscribers = []
         self.sub_subscribers = []
@@ -31,8 +31,9 @@ class twitch_chat(object):
         self.oauth = oauth
         channel_servers = {}
         for channel in channels:
-            url = "http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel)
-            response = urlopen(url)
+            req = Request("http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel))
+            req.add_header('Client-ID', client_id)
+            response = urlopen(req)
             data = json.loads(response.read().decode('UTF-8'))
             for server in data["chat_servers"]:
                 if server in channel_servers:
