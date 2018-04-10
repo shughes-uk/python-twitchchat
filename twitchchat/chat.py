@@ -100,8 +100,6 @@ class twitch_chat(object):
     def check_usernotice(self, ircMessage, client):
         "Parse out new twitch subscriber messages and then call... python subscribers"
         if ircMessage[0] == '@':
-            if 'USERNOTICE' in ircMessage:
-                print(ircMessage)
             arg_regx = r"([^=;]*)=([^ ;]*)"
             arg_regx = re.compile(arg_regx, re.UNICODE)
             args = dict(re.findall(arg_regx, ircMessage[1:]))
