@@ -25,7 +25,7 @@ class twitch_chat(object):
     def __init__(self, user, oauth, channels, client_id):
         self.logger = logging.getLogger(name="twitch_chat")
         self.chat_subscribers = []
-        self.sub_subscribers = []
+        self.usernotice_subscribers = []
         self.channels = channels
         self.user = user
         self.oauth = oauth
@@ -77,9 +77,9 @@ class twitch_chat(object):
         "Subscribe to a callback for incoming chat messages"
         self.chat_subscribers.append(callback)
 
-    def subscribeNewSubscriber(self, callback):
+    def subscribeUsernotice(self, callback):
         "Subscribe to a callback for new subscribers and resubs"
-        self.sub_subscribers.append(callback)
+        self.usernotice_subscribers.append(callback)
 
     def check_error(self, ircMessage, client):
         "Check for a login error notification and terminate if found"
@@ -97,29 +97,30 @@ class twitch_chat(object):
                 self.logger.info("Joined channel {0} successfully".format(match.group(1)))
                 return True
 
-    def check_subscriber(self, ircMessage, client):
+    def check_usernotice(self, ircMessage, client):
         "Parse out new twitch subscriber messages and then call... python subscribers"
-        match = re.search(
-            r":twitchnotify!twitchnotify@twitchnotify\.tmi\.twitch\.tv PRIVMSG #([^ ]*) :([^ ]*) just subscribed!",
-            ircMessage)
-        if match:
-            channel = match.group(1)
-            new_subscriber = match.group(2)
-            self.logger.info("{0} has a new subscriber! {1}".format(channel, new_subscriber))
-            for sub in self.sub_subscribers:
-                sub(channel, new_subscriber, 0)
-            return True
-        match = re.search(
-            r":twitchnotify!twitchnotify@twitchnotify\.tmi\.twitch\.tv PRIVMSG #([^ ]*) :([^ ]*) subscribed for (.) months in a row!",
-            ircMessage)
-        if match:
-            channel = match.group(1)
-            subscriber = match.group(2)
-            months = match.group(3)
-            self.logger.info(("{0} subscribed to {1} for {2} months in a row".format(subscriber, channel, months)))
-            for sub in self.sub_subscribers:
-                sub(channel, subscriber, months)
-            return True
+        if ircMessage[0] == '@':
+            if 'USERNOTICE' in ircMessage:
+                print(ircMessage)
+            arg_regx = r"([^=;]*)=([^ ;]*)"
+            arg_regx = re.compile(arg_regx, re.UNICODE)
+            args = dict(re.findall(arg_regx, ircMessage[1:]))
+            regex = (
+                r'^@[^ ]* :tmi.twitch.tv'
+                r' USERNOTICE #(?P<channel>[^ ]*)'  # channel
+                r'((?: :)?(?P<message>.*))?')  # message
+            regex = re.compile(regex, re.UNICODE)
+            match = re.search(regex, ircMessage)
+            if match:
+                args['channel'] = match.group(1)
+                args['message'] = match.group(2)
+                for subscriber in self.usernotice_subscribers:
+                    try:
+                        subscriber(args)
+                    except Exception:
+                        msg = "Exception during callback to {0}".format(subscriber)
+                        self.logger.exception(msg)
+                return True
 
     def check_ping(self, ircMessage, client):
         "Respond to ping messages or twitch boots us off"
@@ -131,30 +132,34 @@ class twitch_chat(object):
     def check_message(self, ircMessage, client):
         "Watch for chat messages and notifiy subsribers"
         if ircMessage[0] == "@":
-            arg_regx = "([^=;]*)=([^ ;]*)"
+            arg_regx = r"([^=;]*)=([^ ;]*)"
             arg_regx = re.compile(arg_regx, re.UNICODE)
             args = dict(re.findall(arg_regx, ircMessage[1:]))
-            regex = ('^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
-                     ' PRIVMSG #([^ ]*)'  # channel
-                     ' :(.*)')  # message
+            regex = (r'^@[^ ]* :([^!]*)![^!]*@[^.]*.tmi.twitch.tv'  # username
+                     r' PRIVMSG #([^ ]*)'  # channel
+                     r' :(.*)')  # message
             regex = re.compile(regex, re.UNICODE)
             match = re.search(regex, ircMessage)
-            args['username'] = match.group(1)
-            args['channel'] = match.group(2)
-            args['message'] = match.group(3)
-            for subscriber in self.chat_subscribers:
-                try:
-                    subscriber(args)
-                except Exception:
-                    msg = "Exception during callback to {0}".format(subscriber)
-                    self.logger.exception(msg)
-            return True
+            if match:
+                args['username'] = match.group(1)
+                args['channel'] = match.group(2)
+                args['message'] = match.group(3)
+                for subscriber in self.chat_subscribers:
+                    try:
+                        subscriber(args)
+                    except Exception:
+                        msg = "Exception during callback to {0}".format(subscriber)
+                        self.logger.exception(msg)
+                return True
 
     def handle_connect(self, client):
         self.logger.info('Connected..authenticating as {0}'.format(self.user))
         client.send_message('Pass ' + self.oauth + '\r\n')
         client.send_message('NICK ' + self.user + '\r\n'.lower())
         client.send_message('CAP REQ :twitch.tv/tags\r\n')
+        client.send_message('CAP REQ :twitch.tv/membership\r\n')
+        client.send_message('CAP REQ :twitch.tv/commands\r\n')
+
         for server in self.channel_servers:
             if server == client.serverstring:
                 self.logger.info('Joining channels {0}'.format(self.channel_servers[server]))
@@ -168,7 +173,7 @@ class twitch_chat(object):
             return
         elif self.check_join(ircMessage, client):
             return
-        elif self.check_subscriber(ircMessage, client):
+        elif self.check_usernotice(ircMessage, client):
             return
         elif self.check_ping(ircMessage, client):
             return
