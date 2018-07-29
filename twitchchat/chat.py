@@ -29,18 +29,7 @@ class twitch_chat(object):
         self.channels = channels
         self.user = user
         self.oauth = oauth
-        channel_servers = {}
-        for channel in channels:
-            req = Request("http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel))
-            req.add_header('client_id', client_id)
-            response = urlopen(req)
-            data = json.loads(response.read().decode('UTF-8'))
-            for server in data["chat_servers"]:
-                if server in channel_servers:
-                    channel_servers[server]['channel_set'].add(channel)
-                else:
-                    channel_servers[server] = {"channel_set": {channel}}
-        self.channel_servers = self.eliminate_duplicate_servers(channel_servers)
+        self.channel_servers = {'irc.chat.twitch.tv:6667': {'channel_set': channels}}
         self.irc_handlers = []
         for server in self.channel_servers:
             handler = tmi_client(server, self.handle_message, self.handle_connect)
@@ -58,20 +47,6 @@ class twitch_chat(object):
     def stop(self):
         for handler in self.irc_handlers:
             handler.stop()
-
-    def eliminate_duplicate_servers(self, channel_servers):
-        for key in list(channel_servers):
-            if key in channel_servers:
-                for other_key in list(channel_servers):
-                    if other_key != key and other_key in channel_servers:
-                        if channel_servers[other_key]['channel_set'].issubset(channel_servers[key]['channel_set']):
-                            del channel_servers[other_key]
-        for server in channel_servers:
-            for channel in channel_servers[server]['channel_set']:
-                for other_server in channel_servers:
-                    if other_server != server and channel in channel_servers[other_server]['channel_set']:
-                        channel_servers[other_server]['channel_set'].remove(channel)
-        return channel_servers
 
     def subscribeChatMessage(self, callback):
         "Subscribe to a callback for incoming chat messages"
