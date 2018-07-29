@@ -32,7 +32,7 @@ class twitch_chat(object):
         channel_servers = {}
         for channel in channels:
             req = Request("http://api.twitch.tv/api/channels/{0}/chat_properties".format(channel))
-            req.add_header('Client-ID', client_id)
+            req.add_header('client_id', client_id)
             response = urlopen(req)
             data = json.loads(response.read().decode('UTF-8'))
             for server in data["chat_servers"]:
