@@ -5,6 +5,8 @@ description = "Asyncio client for Twitch chat (IRC): typed events, callbacks and
 readme = "README.md"
 authors = [{ name = "shughes-uk" }]
 requires-python = ">=3.15"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 keywords = ["twitch", "irc", "chat", "asyncio"]
 classifiers = [

@@ -195,3 +195,7 @@ number to edit by hand.
 
 Note that the distribution name is **`python-twitchchat`**, because `twitchchat`
 is already taken on PyPI by an unrelated project.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
