@@ -1,0 +1,89 @@
+[project]
+name = "python-twitchchat"
+dynamic = ["version"]
+description = "Asyncio client for Twitch chat (IRC): typed events, callbacks and async iteration."
+readme = "README.md"
+authors = [{ name = "shughes-uk" }]
+requires-python = ">=3.15"
+dependencies = []
+keywords = ["twitch", "irc", "chat", "asyncio"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Communications :: Chat :: Internet Relay Chat",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/shughes-uk/python-twitchchat"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+fallback_version = "0.0.0"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "pyproject.toml"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/twitchchat"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1",
+    "ruff>=0.13",
+    "ty>=0.0.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py315"
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "PL", "PT", "RET",
+    "ASYNC", "S", "BLE", "FBT", "PIE", "PERF", "TRY", "EM", "G", "LOG", "SLF", "TC",
+    "PTH", "D2", "D3", "D4",
+]
+ignore = [
+    "D203", "D213", "D401", "D413",
+    "TRY003",  # long messages in exception constructors
+    "FBT001", "FBT002",  # boolean params are part of the public API (tls=, reconnect=)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "EM101", "PLR2004", "SLF001", "D", "FBT003"]
+"examples/**" = ["T201", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ty.environment]
+python-version = "3.15"
+
+[tool.ty.src]
+include = ["src", "tests", "examples"]
+
+[tool.ty.rules]
+possibly-unresolved-reference = "error"
