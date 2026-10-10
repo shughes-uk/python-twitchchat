@@ -128,7 +128,7 @@ def parse_line(line: str) -> IrcMessage:
     elif rest.startswith(":"):
         trailing = rest[1:]
         rest = ""
-    parts = rest.split()
+    parts = [p for p in rest.split(" ") if p]
     if not parts:
         msg = f"no command in IRC line: {raw!r}"
         raise ValueError(msg)
@@ -142,11 +142,11 @@ def format_line(command: str, *params: str, tags: dict[str, str] | None = None) 
     """Build an IRC line (with CRLF). The last param is sent as trailing if needed.
 
     Raises:
-        ValueError: if any part contains CR/LF (which would allow injection).
+        ValueError: if any part contains CR, LF or NUL (which would allow injection).
     """
     for part in (command, *params):
-        if "\r" in part or "\n" in part:
-            msg = "IRC parameters must not contain CR or LF"
+        if "\r" in part or "\n" in part or "\0" in part:
+            msg = "IRC parameters must not contain CR or LF (or NUL)"
             raise ValueError(msg)
     pieces: list[str] = []
     if tags:

@@ -42,15 +42,22 @@ def parse_badges(value: str | None) -> dict[str, str]:
 
 def _timestamp(tags: dict[str, str]) -> datetime | None:
     ts = tags.get("tmi-sent-ts")
-    if ts and ts.isdigit():
-        return datetime.fromtimestamp(int(ts) / 1000, tz=UTC)
+    if ts and ts.isascii() and ts.isdigit():
+        try:
+            return datetime.fromtimestamp(int(ts) / 1000, tz=UTC)
+        except OverflowError, OSError, ValueError:
+            return None
     return None
 
 
 def _int(value: str | None) -> int | None:
-    if value is None or not value.lstrip("-").isdigit():
+    digits = "" if value is None else value.removeprefix("-")
+    if value is None or not (digits.isascii() and digits.isdigit()):
         return None
-    return int(value)
+    try:
+        return int(value)
+    except ValueError:  # non-numeric, or longer than int's max string digits
+        return None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

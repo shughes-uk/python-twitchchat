@@ -71,7 +71,7 @@ asyncio.run(main())
 | Member | Purpose |
 | --- | --- |
 | `async with chat` / `await chat.connect()` / `await chat.close()` | Connect and authenticate, then join the configured channels. A bad token raises `AuthenticationError`. |
-| `async for event in chat` / `chat.events(*types)` | Async iterator of events, optionally filtered by type. It buffers from the moment it is created and ends when the client closes. |
+| `async for event in chat` / `chat.events(*types, maxsize=10_000)` | Async iterator of events, optionally filtered by type. It buffers from the moment it is created (up to `maxsize` events; the oldest are dropped if you fall behind) and ends when the client closes or you `aclose()` it. |
 | `chat.on(EventType)` / `add_listener` / `remove_listener` | Register sync or async callbacks. They also match subclasses, so `chat.on(Event)` receives everything. |
 | `await chat.send(channel, text, reply_to=None)` / `await chat.reply(msg, text)` | Send a message, rate limited client-side. Anonymous sessions raise `TwitchChatError`. |
 | `await chat.join(channel)` / `await chat.part(channel)` | Change channels at runtime. Joined channels are rejoined after a reconnect. |

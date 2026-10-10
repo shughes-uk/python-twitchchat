@@ -1,6 +1,7 @@
 """Client tests against a small fake Twitch IRC server on localhost."""
 
 import asyncio
+import gc
 import logging
 lazy from collections.abc import AsyncIterator
 
@@ -354,3 +355,114 @@ async def test_rate_limiter() -> None:
 def test_rate_limiter_validation() -> None:
     with pytest.raises(ValueError, match="limit"):
         RateLimiter(0, 1)
+
+
+async def test_malformed_lines_do_not_kill_reader(fake: FakeTwitch) -> None:
+    async with make_chat(fake) as chat:
+        messages = chat.events(ChatMessage)
+        await fake.push("PING :a\rb")  # PONG would contain CR -> format_line ValueError
+        await fake.push(":only.a.prefix")
+        await fake.push(PRIVMSG.format(chan="chan", text="still alive"))
+        msg = await next_of(messages, ChatMessage)
+        assert msg.text == "still alive"
+        assert chat.connected
+        assert not chat.closed
+
+
+async def test_send_raw_rejects_embedded_newlines(fake: FakeTwitch) -> None:
+    async with make_chat(fake, nick="bot", token="tok") as chat:
+        with pytest.raises(ValueError, match="single IRC line"):
+            await chat.send_raw("PRIVMSG #chan :hi\r\nJOIN #evil")
+        await chat.send_raw("PRIVMSG #chan :ok\r\n")
+        await fake.wait_for_line("PRIVMSG #chan :ok")
+
+
+@pytest.mark.parametrize("bad", ["", "#", "a b", "a,b", "a\r\nQUIT"])
+async def test_invalid_channel_names_rejected(fake: FakeTwitch, bad: str) -> None:
+    with pytest.raises(ValueError, match="invalid channel"):
+        TwitchChat([bad])
+    async with make_chat(fake, nick="bot", token="tok") as chat:
+        with pytest.raises(ValueError, match="invalid channel"):
+            await chat.join(bad)
+        with pytest.raises(ValueError, match="invalid channel"):
+            await chat.send(bad, "hi")
+
+
+async def test_stream_ends_for_every_consumer_and_after_close(fake: FakeTwitch) -> None:
+    chat = make_chat(fake)
+    await chat.connect()
+    stream = chat.events()
+
+    async def drain() -> None:
+        async for _ in stream:
+            pass
+
+    tasks = [asyncio.create_task(drain()) for _ in range(3)]
+    await asyncio.sleep(0)
+    await chat.close()
+    async with asyncio.timeout(5):
+        await asyncio.gather(*tasks)
+        assert [e async for e in stream] == []  # iterating again also ends
+
+
+async def test_aclose_wakes_waiting_consumer(fake: FakeTwitch) -> None:
+    async with make_chat(fake) as chat:
+        stream = chat.events(ChatMessage)
+        task = asyncio.create_task(anext(stream, None))
+        await asyncio.sleep(0)
+        await stream.aclose()
+        async with asyncio.timeout(5):
+            assert await task is None
+
+
+async def test_abandoned_stream_is_not_retained(fake: FakeTwitch) -> None:
+    async with make_chat(fake, ["chan"]) as chat:
+        async for _ in chat:
+            break  # never aclose()d
+        gc.collect()
+        assert len(chat._streams) == 0
+
+
+async def test_stream_maxsize_drops_oldest(
+    fake: FakeTwitch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async with make_chat(fake, ["chan"]) as chat:
+        stream = chat.events(ChatMessage, maxsize=2)
+        last = chat.events(ChatMessage)
+        with caplog.at_level(logging.WARNING, logger="twitchchat"):
+            for i in range(5):
+                await fake.push(PRIVMSG.format(chan="chan", text=str(i)))
+            for _ in range(5):
+                await next_of(last, ChatMessage)
+        assert stream.dropped == 3
+        assert [(await anext(stream)).text for _ in range(2)] == ["3", "4"]
+        assert "dropping oldest" in caplog.text
+
+
+async def test_close_from_listener(fake: FakeTwitch) -> None:
+    chat = make_chat(fake, ["chan"])
+
+    @chat.on(ChatMessage)
+    async def stop(_event: ChatMessage) -> None:
+        await chat.close()
+
+    await chat.connect()
+    await fake.wait_for_line("JOIN")
+    await fake.push(PRIVMSG.format(chan="chan", text="bye"))
+    async with asyncio.timeout(5):
+        await chat.wait_closed()
+    assert chat.closed
+    assert chat.exception is None
+    assert fake.connections == 1
+
+
+async def test_fast_disconnects_back_off(fake: FakeTwitch) -> None:
+    async with make_chat(fake) as chat:
+        assert fake.writer is not None
+        fake.writer.close()
+        await asyncio.sleep(0.5)
+        # dropped right after connecting: wait (1s backoff) before reconnecting
+        assert fake.connections == 1
+        connected = chat.events(Connected)
+        await next_of(connected, Connected)
+        assert fake.connections == 2

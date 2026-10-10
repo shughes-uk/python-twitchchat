@@ -162,3 +162,14 @@ def test_parse_badges() -> None:
     assert parse_badges(None) == {}
     assert parse_badges("") == {}
     assert parse_badges("a/1,b/,c") == {"a": "1", "b": "", "c": ""}
+
+
+def test_malformed_numeric_tags_are_ignored() -> None:
+    line = "@bits=²;tmi-sent-ts={ts} :a!a@a PRIVMSG #c :hi"
+    for ts in ("9" * 30, "²", "9" * 5000):
+        msg = ev(line.format(ts=ts))
+        assert isinstance(msg, ChatMessage)
+        assert msg.bits is None
+        assert msg.timestamp is None
+    assert isinstance(e := ev("@ban-duration=" + "9" * 5000 + " :t CLEARCHAT #c :u"), ClearChat)
+    assert e.ban_duration is None

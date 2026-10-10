@@ -136,3 +136,13 @@ def test_format_parse_roundtrip() -> None:
     msg = parse_line(line)
     assert msg.params == ("#chan", ":) hello")
     assert msg.tags == {"k": "v;w"}
+
+
+def test_format_line_rejects_nul() -> None:
+    with pytest.raises(ValueError, match="CR or LF"):
+        format_line("PRIVMSG", "#c", "a\0b")
+
+
+def test_parse_splits_middle_params_on_spaces_only() -> None:
+    msg = parse_line("PRIVMSG #c\tx :hi")
+    assert msg.params == ("#c\tx", "hi")

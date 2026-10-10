@@ -5,13 +5,14 @@ import contextlib
 import inspect
 import logging
 import secrets
+import weakref
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from typing import Protocol, Self, overload
 lazy import ssl
 
 from .events import ChatMessage, Connected, Event, Notice, Reconnect, event_from_irc
-from .irc import IrcMessage, format_line, parse_line
+from .irc import format_line, parse_line
 
 __all__ = [
     "DEFAULT_HOST",
@@ -30,6 +31,8 @@ DEFAULT_HOST = "irc.chat.twitch.tv"
 DEFAULT_PORT = 6697
 DEFAULT_CAPABILITIES = ("twitch.tv/tags", "twitch.tv/commands", "twitch.tv/membership")
 _AUTH_FAILURES = ("Login authentication failed", "Improperly formatted auth")
+_RECONNECT_REQUESTED = "server requested reconnect"
+_STABLE_AFTER = 30.0  # seconds a connection must last before reconnect backoff resets
 
 type Listener[E: Event] = Callable[[E], Awaitable[None] | None]
 
@@ -83,25 +86,39 @@ class EventStream[E: Event]:
     """Async iterator over events, created by :meth:`TwitchChat.events`.
 
     Buffers from the moment it is created until it is closed (``aclose()``,
-    ``async with``, or the client closing).
+    ``async with``, the client closing, or the stream being garbage collected).
+    At most ``maxsize`` events are buffered; when the consumer falls behind, the
+    oldest events are dropped (with a warning).
     """
 
-    def __init__(self, chat: TwitchChat, types: tuple[type[E], ...]) -> None:
+    def __init__(self, chat: TwitchChat, types: tuple[type[E], ...], maxsize: int = 10_000) -> None:
+        if maxsize < 1:
+            msg = "maxsize must be >= 1"
+            raise ValueError(msg)
         self._chat = chat
         self._types = types
+        self._maxsize = maxsize
         self._queue: asyncio.Queue[E | _Closed] = asyncio.Queue()
         self._done = False
+        self.dropped = 0
         chat._streams.add(self)  # noqa: SLF001
         if chat.closed:
             self._finish()
 
     def _offer(self, event: Event) -> None:
-        if not self._done and (not self._types or isinstance(event, self._types)):
-            self._queue.put_nowait(event)  # ty: ignore[invalid-argument-type]
+        if self._done or (self._types and not isinstance(event, self._types)):
+            return
+        if self._queue.qsize() >= self._maxsize:
+            self._queue.get_nowait()
+            if not self.dropped:
+                logger.warning("event stream full (%d); dropping oldest events", self._maxsize)
+            self.dropped += 1
+        self._queue.put_nowait(event)  # ty: ignore[invalid-argument-type]
 
     def _finish(self) -> None:
         if not self._done:
             self._done = True
+            # The queue itself is unbounded, so the sentinel always fits.
             self._queue.put_nowait(_CLOSED)
 
     def __aiter__(self) -> Self:
@@ -110,6 +127,8 @@ class EventStream[E: Event]:
     async def __anext__(self) -> E:
         item = await self._queue.get()
         if isinstance(item, _Closed):
+            # Put the sentinel back so later and concurrent __anext__ calls also end.
+            self._queue.put_nowait(item)
             self._chat._streams.discard(self)  # noqa: SLF001
             if self._chat.exception is not None:
                 raise self._chat.exception
@@ -118,7 +137,7 @@ class EventStream[E: Event]:
 
     async def aclose(self) -> None:
         self._chat._streams.discard(self)  # noqa: SLF001
-        self._done = True
+        self._finish()
 
     async def __aenter__(self) -> Self:
         return self
@@ -128,7 +147,12 @@ class EventStream[E: Event]:
 
 
 def _normalize_channel(channel: str) -> str:
-    return channel.strip().lstrip("#").lower()
+    name = channel.strip().lstrip("#").lower()
+    # Space/comma would turn into extra parameters or a multi-channel JOIN.
+    if not name or any(c in name for c in " ,\r\n\0"):
+        msg = f"invalid channel name: {channel!r}"
+        raise ValueError(msg)
+    return name
 
 
 class TwitchChat:
@@ -191,7 +215,9 @@ class TwitchChat:
 
         self.channels: set[str] = {_normalize_channel(c) for c in channels}
         self._listeners: dict[type[Event], list[Listener[Event]]] = {}
-        self._streams: set[_Sink] = set()
+        # Weak, so streams abandoned without aclose() (e.g. ``break`` out of
+        # ``async for event in chat``) are collected instead of buffering forever.
+        self._streams: weakref.WeakSet[_Sink] = weakref.WeakSet()
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._ready = asyncio.Event()
@@ -280,12 +306,15 @@ class TwitchChat:
         return decorator
 
     @overload
-    def events(self) -> EventStream[Event]: ...
+    def events(self, *, maxsize: int = ...) -> EventStream[Event]: ...
     @overload
-    def events[E: Event](self, *types: type[E]) -> EventStream[E]: ...
-    def events(self, *types: type[Event]) -> EventStream[Event]:
-        """Return an async iterator of events, optionally filtered by type."""
-        return EventStream(self, types)
+    def events[E: Event](self, *types: type[E], maxsize: int = ...) -> EventStream[E]: ...
+    def events(self, *types: type[Event], maxsize: int = 10_000) -> EventStream[Event]:
+        """Return an async iterator of events, optionally filtered by type.
+
+        At most ``maxsize`` unconsumed events are buffered (oldest dropped first).
+        """
+        return EventStream(self, types, maxsize)
 
     def __aiter__(self) -> AsyncIterator[Event]:
         return self.events()
@@ -326,8 +355,16 @@ class TwitchChat:
             await self._send_line(format_line("PART", "#" + name))
 
     async def send_raw(self, line: str) -> None:
-        """Send a raw IRC line (CRLF is appended if missing). Not rate limited."""
-        await self._send_line(line if line.endswith("\r\n") else line + "\r\n")
+        """Send one raw IRC line (CRLF is appended if missing). Not rate limited.
+
+        Raises:
+            ValueError: if the line contains CR, LF or NUL other than a final CRLF.
+        """
+        body = line.removesuffix("\r\n")
+        if "\r" in body or "\n" in body or "\0" in body:
+            msg = "raw line must be a single IRC line (no embedded CR, LF or NUL)"
+            raise ValueError(msg)
+        await self._send_line(body + "\r\n")
 
     # -- internals -------------------------------------------------------------------
 
@@ -389,19 +426,20 @@ class TwitchChat:
         if not line:
             return True
         logger.debug("< %s", line)
+        # A malformed line from the server must never kill the reader.
         try:
             msg = parse_line(line)
-        except ValueError:
-            logger.warning("unparseable line: %r", line)
+            if msg.command == "PING":
+                self._write_now(format_line("PONG", msg.trailing or "tmi.twitch.tv"))
+                return True
+            event = event_from_irc(msg)
+        except Exception:
+            logger.warning("unparseable line: %r", line, exc_info=True)
             return True
-        await self._handle(msg)
+        await self._handle(event)
         return True
 
-    async def _handle(self, msg: IrcMessage) -> None:
-        if msg.command == "PING":
-            self._write_now(format_line("PONG", msg.trailing or "tmi.twitch.tv"))
-            return
-        event = event_from_irc(msg)
+    async def _handle(self, event: Event) -> None:
         if isinstance(event, Connected):
             self._on_welcome()
         elif isinstance(event, Reconnect):
@@ -449,17 +487,24 @@ class TwitchChat:
     async def _run(self) -> None:
         error: BaseException | None = None
         backoff = 1.0
+        loop = asyncio.get_running_loop()
         try:
             while True:
+                connected_at = loop.time()
                 reason = await self._read_loop()
                 self._drop_connection()
-                if not self.reconnect:
+                if not self.reconnect or self._closed:
                     break
                 logger.info("disconnected (%s); reconnecting", reason)
+                if reason == _RECONNECT_REQUESTED or loop.time() - connected_at > _STABLE_AFTER:
+                    backoff = 1.0
+                else:
+                    # Dropped soon after connecting: back off instead of hammering.
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 60.0)
                 while True:
                     try:
                         await self._open()
-                        backoff = 1.0
                         break
                     except AuthenticationError:
                         raise
@@ -477,6 +522,8 @@ class TwitchChat:
 
     async def _read_loop(self) -> str:
         while True:
+            if self._closed:  # close() was called from a listener on this task
+                return "closed"
             try:
                 async with asyncio.timeout(self.read_timeout):
                     alive = await self._read_one()
@@ -488,10 +535,14 @@ class TwitchChat:
                 return "connection closed by server"
             if self._reconnect_requested:
                 self._reconnect_requested = False
-                return "server requested reconnect"
+                return _RECONNECT_REQUESTED
 
     def _drop_connection(self) -> None:
         self._ready.clear()
+        # Pending rate-limited joins belong to the old connection; the next
+        # welcome schedules a fresh join of every channel.
+        for task in list(self._background):
+            task.cancel()
         if self._writer is not None:
             self._writer.close()
         self._reader = self._writer = None
