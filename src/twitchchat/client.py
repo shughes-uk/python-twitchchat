@@ -8,11 +8,13 @@ import secrets
 import weakref
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
-from typing import Protocol, Self, overload
-lazy import ssl
+from typing import TYPE_CHECKING, Protocol, Self, overload
 
 from .events import ChatMessage, Connected, Event, Notice, Reconnect, event_from_irc
 from .irc import format_line, parse_line
+
+if TYPE_CHECKING:
+    import ssl
 
 __all__ = [
     "DEFAULT_HOST",

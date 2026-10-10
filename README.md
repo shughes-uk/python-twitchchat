@@ -5,7 +5,7 @@ It has no runtime dependencies and gives you typed events, an async iterator,
 callback registration, rate-limited sending, automatic PING/PONG and automatic
 reconnects.
 
-- **Requirements:** Python 3.15 or newer, standard library only.
+- **Requirements:** Python 3.14 or newer, standard library only.
 - **Install:** `pip install python-twitchchat` or `uv add python-twitchchat`. The import name is `twitchchat`.
 - Connects to `irc.chat.twitch.tv:6697` over TLS.
 
@@ -150,8 +150,8 @@ uv run examples/watch_chat.py --seconds 60 somebigchannel anotherone
 
 ## Development
 
-The project uses [uv](https://docs.astral.sh/uv/). `.python-version` pins
-Python 3.15, which uv downloads automatically.
+The project uses [uv](https://docs.astral.sh/uv/). It supports Python 3.14 and 3.15;
+`.python-version` pins 3.15 for development, which uv downloads automatically.
 
 ```sh
 uv sync                  # create .venv with dev tools (ruff, ty, pytest, pytest-asyncio)

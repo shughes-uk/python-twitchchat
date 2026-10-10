@@ -3,7 +3,7 @@
 import asyncio
 import gc
 import logging
-lazy from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -19,6 +19,9 @@ from twitchchat import (
     TwitchChatError,
     UserNotice,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 PRIVMSG = (
     "@badges=subscriber/1;display-name=Foo;id=m1;tmi-sent-ts=1700000000000"
