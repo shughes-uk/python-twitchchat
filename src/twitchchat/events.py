@@ -2,8 +2,10 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-lazy from .irc import IrcMessage
+if TYPE_CHECKING:
+    from .irc import IrcMessage
 
 __all__ = [
     "ChatMessage",
